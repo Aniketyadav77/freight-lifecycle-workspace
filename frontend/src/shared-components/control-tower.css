@@ -1,0 +1,136 @@
+/**
+ * PORTED FROM: fleet-control-tower / src/index.css — the excerpt the copied
+ * components actually need.
+ *
+ * Originally this file carried only what the ported map and table needed, and
+ * the rest of the app kept its own slate palette — which left a visible seam
+ * down the middle of the Tracking view. The two projects are presented
+ * together, so the whole app now wears this system and the seam is gone.
+ *
+ * Deliberately NOT copied: the `body` rule (this app sets its own in index.css)
+ * and the alert-in keyframes, which nothing here uses.
+ *
+ * ---------------------------------------------------------------------------
+ * Neumorphic design system
+ * ---------------------------------------------------------------------------
+ * Neumorphism works by pretending every surface is the *same* material as the
+ * page, lit from the top-left. That gives it one hard constraint: a raised
+ * element must share the page's background colour, or the illusion collapses
+ * into a grey box with a drop shadow.
+ *
+ * It also has one real weakness: soft, low-contrast edges are slow to read.
+ * So the system is applied *selectively*. Containers and controls are
+ * neumorphic; anything an operator scans for meaning -- status, severity,
+ * live-updating numbers -- is deliberately flat and high-contrast, and sits on
+ * plain white.
+ */
+
+@theme {
+  /* The shared material. Raised and inset surfaces both use this. */
+  --color-surface: #e8ecf3;
+
+  /* Flat surfaces that opt out of the material: table rows, data panes. */
+  --color-card: #ffffff;
+
+  --color-ink: #2b3445;
+  --color-accent: #3d5afe;
+
+  /**
+   * Status colours are flat by design and never carry a neumorphic shadow.
+   * They are the only saturated colours in the palette, so they read instantly
+   * against the soft grey-blue surface.
+   */
+  --color-ok: #1fae6a;
+  --color-warn: #f5a623;
+  --color-bad: #e5484d;
+
+  --radius-neu: 10px;
+}
+
+:root {
+  /* The two light sources. Not Tailwind colours -- they only ever appear
+     inside the shadow utilities below. */
+  --neu-light: #ffffff;
+  --neu-dark: #a3b1c6;
+}
+
+@layer base {
+  /**
+   * Every number in this dashboard updates live. Proportional digits change
+   * width as they change value, so a value going 99 -> 100 -> 99 makes the
+   * whole row twitch. Tabular figures are fixed-width, so the column stays
+   * still and only the glyphs change.
+   */
+  :where(td, th, .num, [data-num]) {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /**
+   * Raised: the surface sits above the page. Dark shadow bottom-right, light
+   * highlight top-left, both soft and both large enough to read at a glance
+   * without becoming a drop shadow.
+   */
+  .neu-raised {
+    background-color: var(--color-surface);
+    box-shadow:
+      6px 6px 12px var(--neu-dark),
+      -6px -6px 12px var(--neu-light);
+  }
+
+  /** A shallower raise, for small controls that should not look like slabs. */
+  .neu-raised-sm {
+    background-color: var(--color-surface);
+    box-shadow:
+      3px 3px 7px var(--neu-dark),
+      -3px -3px 7px var(--neu-light);
+  }
+
+  /**
+   * Inset: the surface is pressed into the page. Same two lights, same
+   * directions, moved inside. The system's affordance for "on".
+   */
+  .neu-inset {
+    background-color: var(--color-surface);
+    box-shadow:
+      inset 4px 4px 8px var(--neu-dark),
+      inset -4px -4px 8px var(--neu-light);
+  }
+
+  /**
+   * Motion is opt-in, per the rule that only state changes animate.
+   *
+   * This goes on things that toggle between raised and inset, so the press
+   * reads as a press. Deliberately not on cards: a dashboard where every
+   * surface reacts to the pointer is noise, and these shadows are expensive
+   * enough to animate that doing it across dozens of cards costs real frames.
+   */
+  .neu-toggle {
+    transition: box-shadow 180ms ease-out;
+  }
+
+  /**
+   * Status colour changes are the one transition worth having: a badge
+   * changing colour is information, and a 250ms fade makes it noticeable
+   * without the flicker of an instant swap.
+   */
+  .status-transition {
+    transition:
+      background-color 250ms ease-out,
+      color 250ms ease-out,
+      width 250ms ease-out;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neu-toggle,
+  .status-transition {
+    transition: none;
+  }
+}
+
+/* Leaflet paints its own controls outside React; keep them on the same type. */
+.leaflet-container {
+  font-family: var(--font-sans);
+}
