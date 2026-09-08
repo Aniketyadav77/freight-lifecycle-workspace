@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 
+import { RouteLayer } from "./RouteLayer";
 import { EmptyState, LoadingState, ViewHeader } from "../../components/ViewState";
 import { ShipmentMap, ShipmentTable } from "../../shared-components";
 import { useTrackedCount } from "../../shared-components/trackedLoads";
@@ -84,7 +85,9 @@ export function TrackingView() {
 
       <div className="neu-raised overflow-hidden rounded-xl p-4">
         <div className="overflow-hidden rounded-lg">
-          <ShipmentMap height={460} />
+          <ShipmentMap height={460}>
+            <RouteLayer />
+          </ShipmentMap>
         </div>
       </div>
 

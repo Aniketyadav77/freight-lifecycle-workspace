@@ -61,6 +61,13 @@ export function attachRealtime(server, { path = "/ws" } = {}) {
     broadcast(loadId, { type: "status_update", loadId, status, previousStatus, at });
   });
 
+  // Routes go to lobby watchers, like positions: they are for map views.
+  store.events.on("route_ready", ({ loadId, route }) => {
+    for (const client of wss.clients) {
+      if (client.watching?.has(WATCH_ALL)) send(client, { type: "route_ready", loadId, route });
+    }
+  });
+
   store.events.on("invoice_generated", ({ invoice }) => {
     broadcast(invoice.loadId, { type: "invoice_generated", invoice });
   });

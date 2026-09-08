@@ -12,6 +12,22 @@ export interface LoadPosition {
   lng: number;
 }
 
+/**
+ * The path a load drives.
+ *
+ * Coordinates are GeoJSON order — `[lng, lat]` — because that is what OSRM
+ * returns and Leaflet wants `[lat, lng]`. The flip happens once, at render.
+ *
+ * `source` distinguishes a real road route from the straight-line fallback used
+ * when routing is unavailable, so the map can say which it is drawing rather
+ * than quietly passing a straight line off as a road.
+ */
+export interface LoadRoute {
+  coordinates: [number, number][];
+  source: "osrm" | "straight-line";
+  distanceKm: number;
+}
+
 /** One lifecycle transition, as recorded by the server. */
 export interface LoadHistoryEntry {
   status: LoadStatus;
@@ -34,6 +50,8 @@ export interface Load {
   position: LoadPosition | null;
   /** 0-1 along the lane from origin to destination. */
   progress: number;
+  /** The road path, once routing resolves. Null until then. */
+  route: LoadRoute | null;
   /**
    * When this client last heard a position for the load. Stamped on arrival
    * rather than sent on the wire — the same thing the Control Tower's stream
@@ -119,6 +137,7 @@ export type ServerFrame =
       type: "position_update";
       positions: { loadId: string; lat: number; lng: number; progress: number }[];
     }
+  | { type: "route_ready"; loadId: string; route: LoadRoute }
   | { type: "invoice_generated"; invoice: Invoice }
   | { type: "invoice_updated"; invoice: Invoice }
   | { type: "unwatched"; loadId: string }

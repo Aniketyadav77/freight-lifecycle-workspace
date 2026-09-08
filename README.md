@@ -207,9 +207,12 @@ Three things are faked, and each says so in its own source file:
 - **Driver departure** (`server/src/simulation.js`) — a real TMS gets this from
   a driver's "start trip" tap or a geofence crossing. A server would never
   advance a load on a timer.
-- **Positions** (same file) — a straight-line nudge toward the destination,
-  compressed 900× so a lane crosses in about a minute instead of seventeen
-  hours.
+- **Positions** (same file) — the *route* is real: an actual driving path from
+  the OSRM public demo API, so a load follows the highways it would really take
+  and the map draws the road. What is faked is the vehicle walking that path on
+  a timer instead of a truck reporting where it is, compressed 900× so a lane
+  crosses in about a minute instead of seventeen hours. If routing is
+  unavailable it falls back to a straight line and says so on the map.
 - **The invoiced amount** (`server/src/billing.js`) — a real system reconciles
   the transporter's actual bill. Raising an invoice on delivery is real domain
   behaviour; only the number is derived.

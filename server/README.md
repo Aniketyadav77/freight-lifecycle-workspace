@@ -125,13 +125,51 @@ so nothing downstream can tell the difference. Delete the file to remove it.
 It is attached *after* seeding, so seeded loads parked in `assigned` stay put —
 only assignments made while the server is running trigger a departure.
 
-The same file also streams positions: a one-second interval nudges each
-in-transit load along a straight line toward its destination and broadcasts a
-batched `position_update`. One real second is played as fifteen simulated
-minutes (`TIME_COMPRESSION`), because a truck's real 14 m/s is invisible on a
-map of India. Coordinates come from `src/places.js`, a small gazetteer of the
+The same file also streams positions: a one-second interval advances each
+in-transit load **along a real driving route** and broadcasts a batched
+`position_update`. One real second is played as fifteen simulated minutes
+(`TIME_COMPRESSION`), because a truck's real 14 m/s is invisible on a map of
+India. Endpoint coordinates come from `src/places.js`, a small gazetteer of the
 seeded lanes; unknown place names get a deterministic fallback position derived
 from the name, so ad-hoc loads still track sensibly.
+
+## Road routing (`src/routing.js`)
+
+When a load departs, the server fetches a driving route from the **OSRM public
+demo API** (`overview=full&geometries=geojson`) and the load then follows that
+road path instead of a straight line.
+
+> **Demo only.** `router.project-osrm.org` is a free, unauthenticated instance
+> run as a courtesy by the OSRM project — rate-limited, no uptime guarantee, and
+> its usage policy asks that it not be used for production. A real product would
+> self-host OSRM (open source; a country extract runs on a small VM) or pay for
+> Mapbox / Google Routes / HERE. Swapping providers means changing
+> `requestRoute` and nothing else.
+
+Being a guest on a free service shapes two decisions:
+
+- **Requests are serialised and spaced** (~350 ms apart) rather than fired in
+  parallel at boot.
+- **Routes are cached by lane, not by load** — every load on Bhiwandi →
+  Bengaluru is the same road, so the seeded book's repeated lanes cost one
+  request each.
+
+**Geometry is split in two.** OSRM returns ~12,000 points for a 1,000 km route,
+a quarter-megabyte of JSON for a line a few hundred pixels long. The server
+keeps the full path (it drives the movement, where the detail is real) and sends
+browsers a Ramer–Douglas–Peucker simplification — shape-aware, so it spends
+points where the road bends and almost none on a straight highway. In practice
+16,959 points become 1,483, and all four seeded routes together weigh 73 KB
+instead of ~1 MB.
+
+**Failure degrades, it does not break.** A trip starts on the straight line
+between its endpoints and swaps to the road route when OSRM answers, so a
+freshly departed load is never frozen waiting on the network. If the request
+fails or times out (8 s), a warning is logged and the straight line simply
+stays — the fallback is not a special case in the movement code, it is a
+two-point path through the same traversal routine. Clients are told which they
+are looking at via `route.source` (`"osrm"` | `"straight-line"`), so a straight
+line is never drawn as though it were a road.
 
 `src/geo.js` is copied near-verbatim from the Fleet Control Tower server.
 
@@ -172,6 +210,7 @@ bid auto-subscribes you to that load.
 { "type": "load_assigned", "loadId": "ld_1001", "contractedRate": 81200, "transporterId": "tr_konkan-carriers", "transporterName": "Konkan Carriers" }
 { "type": "status_update", "loadId": "ld_1001", "status": "in_transit", "previousStatus": "assigned" }
 { "type": "position_update",  "positions": [ { "loadId": "ld_1001", "lat": 19.1, "lng": 74.3, "progress": 0.42 } ] }
+{ "type": "route_ready",      "loadId": "ld_1001", "route": { "coordinates": [[73.06,19.29], …], "source": "osrm", "distanceKm": 994 } }
 { "type": "invoice_generated", "invoice": { /* see below */ } }
 { "type": "invoice_updated",   "invoice": { /* review state changed */ } }
 { "type": "load_created",  "load": { /* … */ } }        // "*" watchers only
@@ -217,6 +256,8 @@ Two behaviours worth knowing, both in `src/store.js`:
 | `src/routes.js`   | REST handlers and error translation. |
 | `src/billing.js`  | Raises an invoice on delivery; mocks the billed amount. |
 | `src/geo.js`      | Distance/move-toward math, copied from Fleet Control Tower. |
+| `src/routing.js`  | OSRM road routes: fetch, queue, lane cache, fallback. |
+| `src/path.js`     | Polyline traversal + RDP simplification. |
 | `src/places.js`   | Lat/lng for the seeded lanes, with a deterministic fallback. |
 | `src/simulation.js` | Simulated driver departure and position ticks. |
 | `src/transit.js`  | Expected transit time per lane → `deliveryDueDate`. |

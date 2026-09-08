@@ -124,6 +124,24 @@ Positions come from the server's simulation on a one-second tick and are applied
 per load, so untouched loads keep object identity and the procurement board does
 not re-render when a truck moves.
 
+### Route polylines
+
+Each in-transit load carries a `route` (real OSRM road geometry, or a
+straight-line fallback — `route.source` says which). It arrives once via
+`route_ready` and lives on the load in the store, so `features/track/RouteLayer`
+never fetches and a client that connects mid-journey gets the route from the
+initial `GET /loads`.
+
+The layer follows the same id-list pattern as everything else: the list selector
+returns **load ids** (unchanged by movement) and each polyline reads its own
+route object (stable from arrival). Routes are therefore drawn once and ignored
+by the position stream entirely — important, since they run to a couple of
+thousand points.
+
+`ShipmentMap` takes an optional `children` slot for extra Leaflet layers, so the
+freight-specific route overlay lives in the tracking feature rather than inside
+the ported Control Tower component.
+
 The table takes an optional `action` prop (used for "Mark as Delivered"). It
 must be a **module-level component**, not an inline arrow — the row is memo'd
 and compares it by reference.

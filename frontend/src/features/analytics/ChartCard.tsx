@@ -25,8 +25,10 @@ export function ChartCard({
 
   return (
     <section className="neu-raised rounded-xl p-5">
-      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
+      {/* No flex-wrap: a long subtitle must not push the toggle onto its own
+          line, where it floats in the middle of the card. */}
+      <header className="mb-4 flex items-start justify-between gap-4">
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold text-ink">{title}</h2>
           <p className="mt-0.5 text-xs text-ink/55">{subtitle}</p>
         </div>
@@ -34,7 +36,7 @@ export function ChartCard({
           type="button"
           onClick={() => setShowTable((shown) => !shown)}
           aria-pressed={showTable}
-          className={`neu-toggle rounded-lg px-2.5 py-1 text-xs font-medium ${
+          className={`neu-toggle shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium ${
             showTable ? "neu-inset text-accent" : "neu-raised-sm text-ink/65"
           }`}
         >

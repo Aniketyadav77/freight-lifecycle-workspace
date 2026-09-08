@@ -2,6 +2,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  LabelList,
   Legend,
   Line,
   LineChart,
@@ -110,18 +111,17 @@ export function AnalyticsView() {
               />
               {/* One series, one colour for every bar. Colouring bars by their
                   own value would double-encode length as hue. */}
-              <Bar
-                dataKey="totalSpend"
-                fill={VIZ.series1}
-                radius={[0, 4, 4, 0]}
-                barSize={18}
-                label={{
-                  position: "right",
-                  formatter: moneyCompact,
-                  fill: VIZ.ink,
-                  fontSize: 11,
-                }}
-              />
+              <Bar dataKey="totalSpend" fill={VIZ.series1} radius={[0, 4, 4, 0]} barSize={18}>
+                {/* LabelList, not Bar's `label` prop — the shorthand silently
+                    renders nothing in Recharts 3. */}
+                <LabelList
+                  dataKey="totalSpend"
+                  position="right"
+                  formatter={moneyCompact}
+                  fill={VIZ.ink}
+                  fontSize={11}
+                />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         }
@@ -173,18 +173,15 @@ export function AnalyticsView() {
                 formatter={(value: unknown) => [percent(value), "On time"] as [string, string]}
                 contentStyle={TOOLTIP_STYLE}
               />
-              <Bar
-                dataKey="onTimePct"
-                fill={VIZ.series1}
-                radius={[0, 4, 4, 0]}
-                barSize={18}
-                label={{
-                  position: "right",
-                  formatter: percent,
-                  fill: VIZ.ink,
-                  fontSize: 11,
-                }}
-              />
+              <Bar dataKey="onTimePct" fill={VIZ.series1} radius={[0, 4, 4, 0]} barSize={18}>
+                <LabelList
+                  dataKey="onTimePct"
+                  position="right"
+                  formatter={percent}
+                  fill={VIZ.ink}
+                  fontSize={11}
+                />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         }

@@ -203,6 +203,17 @@ export const useFreightStore = create<FreightState>((set, get) => {
       case "position_update":
         return applyPositions(frame.positions);
 
+      /**
+       * The route cache, keyed by load id.
+       *
+       * A route arrives once per load and is then read on every render of the
+       * map. Holding it on the load means the polyline layer never fetches and
+       * re-renders cost nothing — and a load that is already rolling when this
+       * client connects gets its route from the initial `GET /loads` instead.
+       */
+      case "route_ready":
+        return upsertLoad(frame.loadId, { route: frame.route });
+
       case "invoice_generated": {
         upsertInvoice(frame.invoice);
         const gap = rateGap(frame.invoice);

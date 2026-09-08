@@ -128,6 +128,11 @@ export function createLoad(input = {}) {
     // Tracking state. Null until the load starts moving; see simulation.js.
     position: null,
     progress: 0,
+    /**
+     * The road path this load drives, once routing has resolved. Carries the
+     * *simplified* geometry — the full one stays server-side driving movement.
+     */
+    route: null,
     /** Every status this load has held, in order, with when it took it. */
     history: [],
     createdAt: new Date().toISOString(),
@@ -307,6 +312,20 @@ export function setInvoiceReview(loadId, reviewState) {
   invoice.reviewState = reviewState;
   events.emit("invoice_updated", { invoice });
   return invoice;
+}
+
+/**
+ * Records the path a load is driving, so the map can draw the road rather than
+ * just the moving dot. `source` says whether this is a real OSRM route or the
+ * straight-line fallback, which the UI shows rather than hides.
+ */
+export function setRoute(loadId, route) {
+  const load = loads.get(loadId);
+  if (!load) return null;
+
+  load.route = route;
+  events.emit("route_ready", { loadId, route });
+  return load;
 }
 
 /**

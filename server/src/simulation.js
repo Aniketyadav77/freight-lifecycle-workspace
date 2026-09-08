@@ -1,5 +1,7 @@
-import { moveToward, randomBetween, round } from "./geo.js";
+import { randomBetween, round } from "./geo.js";
+import { measurePath, pointAtDistance } from "./path.js";
 import { coordsFor } from "./places.js";
+import { getRoute } from "./routing.js";
 import * as store from "./store.js";
 
 /**
@@ -22,12 +24,16 @@ import * as store from "./store.js";
  * else.
  *
  * The same applies to positions. Real telemetry comes from a vehicle's GPS unit
- * reporting on its own schedule; here a one-second interval nudges each
- * in-transit load along a straight line toward its destination. It is
- * deliberately much simpler than the Fleet Control Tower's simulation server
- * (no zones, no SLA breaches, no jitter or route geometry) because this module
- * exists to prove component reuse and lifecycle integration, not to rebuild
- * that project's real-time engineering.
+ * reporting on its own schedule; here a one-second interval advances each
+ * in-transit load along its route. The *route* is real — an actual driving path
+ * from OSRM (see routing.js) — so a load follows the highways it would really
+ * take. What is simulated is the vehicle walking that path on a timer instead
+ * of a truck reporting where it is.
+ *
+ * This stays deliberately simpler than the Fleet Control Tower's simulation
+ * server (no zones, no SLA breaches, no traffic or speed variance) because this
+ * module exists to prove component reuse and lifecycle integration, not to
+ * rebuild that project's real-time engineering.
  *
  * ============================================================================
  */
@@ -53,12 +59,23 @@ export function attachSimulation({
   tickMs = POSITION_TICK_MS,
 } = {}) {
   const timers = new Map();
-  /** loadId -> { destination, speedKmph, laneKm } for loads currently rolling. */
+  /**
+   * loadId -> { coordinates, cumulative, totalKm, traveledKm, cursor, speedKmph }
+   * for loads currently rolling. `cursor` is where the last tick's lookup ended,
+   * so each tick resumes the scan instead of re-walking the path.
+   */
   const trips = new Map();
 
   /**
-   * Puts a load on the road: parks it at its origin and gives it a speed. Also
-   * called for loads already in transit at boot (the seeded ones), which
+   * Puts a load on the road.
+   *
+   * A trip starts immediately on the straight line between its endpoints, then
+   * upgrades to the real road route when OSRM answers. Waiting for the network
+   * before moving would leave a freshly departed load frozen on the map for a
+   * second or two; starting straight and swapping under it means the only thing
+   * a viewer sees is the path snapping onto real roads.
+   *
+   * Also called for loads already in transit at boot (the seeded ones), which
    * otherwise would have no position to move from.
    */
   function beginTrip(load) {
@@ -68,7 +85,15 @@ export function attachSimulation({
     const destination = coordsFor(load.destination);
     const speedKmph = randomBetween(SPEED_RANGE_KMPH[0], SPEED_RANGE_KMPH[1]);
 
-    trips.set(load.id, { destination, speedKmph });
+    // The fallback is not a special case in the movement code — it is simply a
+    // two-point path. One traversal routine serves both.
+    setPath(load.id, [
+      [origin.lng, origin.lat],
+      [destination.lng, destination.lat],
+    ]);
+    const trip = trips.get(load.id);
+    trip.speedKmph = speedKmph;
+
     store.applyPositions([
       {
         loadId: load.id,
@@ -77,9 +102,58 @@ export function attachSimulation({
         progress: load.progress ?? 0,
       },
     ]);
+
+    // Fire-and-forget: a routing failure resolves to null and leaves the
+    // straight-line path in place, so the tracking view never depends on it.
+    void adoptRoute(load, origin, destination);
   }
 
-  /** One tick: nudge every rolling load toward its destination. */
+  /** Installs a path on a trip, preserving how far along the load already is. */
+  function setPath(loadId, coordinates) {
+    const existing = trips.get(loadId);
+    const { cumulative, totalKm } = measurePath(coordinates);
+    const fraction = existing && existing.totalKm > 0 ? existing.traveledKm / existing.totalKm : 0;
+
+    trips.set(loadId, {
+      ...existing,
+      coordinates,
+      cumulative,
+      totalKm,
+      // Carry progress across the swap as a *fraction*: the road route is
+      // longer than the straight line, so kilometres travelled do not transfer.
+      traveledKm: fraction * totalKm,
+      cursor: 0,
+    });
+  }
+
+  async function adoptRoute(load, origin, destination) {
+    const route = await getRoute(load.origin, load.destination);
+
+    // The load may have been delivered while we were waiting.
+    if (!trips.has(load.id)) return;
+
+    if (!route) {
+      // Straight-line fallback stays. Tell clients so the map can say so.
+      store.setRoute(load.id, {
+        coordinates: [
+          [origin.lng, origin.lat],
+          [destination.lng, destination.lat],
+        ],
+        source: "straight-line",
+        distanceKm: trips.get(load.id)?.totalKm ?? 0,
+      });
+      return;
+    }
+
+    setPath(load.id, route.coordinates);
+    store.setRoute(load.id, {
+      coordinates: route.wire,
+      source: "osrm",
+      distanceKm: route.distanceKm,
+    });
+  }
+
+  /** One tick: advance every rolling load along its path. */
   function tick() {
     const updates = [];
 
@@ -93,21 +167,23 @@ export function attachSimulation({
       }
 
       const stepKm = (trip.speedKmph * (tickMs / 1000) * TIME_COMPRESSION) / 3600;
-      const next = moveToward(load.position, trip.destination, stepKm);
+      trip.traveledKm = Math.min(trip.traveledKm + stepKm, trip.totalKm);
 
-      // Progress is measured against the lane the load actually started on, so
-      // it stays monotonic even though each step is computed from where it is
-      // now rather than from the origin.
-      const origin = coordsFor(load.origin);
-      const laneKm = Math.hypot(
-        trip.destination.lat - origin.lat,
-        trip.destination.lng - origin.lng,
+      const next = pointAtDistance(
+        trip.coordinates,
+        trip.cumulative,
+        trip.traveledKm,
+        trip.cursor,
       );
-      const remaining = Math.hypot(
-        trip.destination.lat - next.lat,
-        trip.destination.lng - next.lng,
-      );
-      const progress = laneKm === 0 ? 1 : Math.min(1, 1 - remaining / laneKm);
+      if (!next) {
+        trips.delete(loadId);
+        continue;
+      }
+      trip.cursor = next.index;
+
+      // Progress is distance along the path, so it is monotonic by construction
+      // and means the same thing whether the path is a road or a straight line.
+      const progress = trip.totalKm === 0 ? 1 : Math.min(1, trip.traveledKm / trip.totalKm);
 
       updates.push({
         loadId,

@@ -67,7 +67,18 @@ function FitToLoadsOnce() {
   return null;
 }
 
-export function ShipmentMap({ height = 520 }: { height?: number | string }) {
+export function ShipmentMap({
+  height = 520,
+  children,
+}: {
+  height?: number | string;
+  /**
+   * Extra Leaflet layers, rendered beneath the markers. An opt-in slot so this
+   * component stays the general-purpose map it was in the source project —
+   * the freight route overlay lives in the tracking feature, not in here.
+   */
+  children?: React.ReactNode;
+}) {
   return (
     <MapContainer
       center={FALLBACK_CENTER}
@@ -83,6 +94,8 @@ export function ShipmentMap({ height = 520 }: { height?: number | string }) {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <FitToLoadsOnce />
+      {/* Overlays first so the markers draw on top of them. */}
+      {children}
       <ClusterLayer />
     </MapContainer>
   );
